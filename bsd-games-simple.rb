@@ -1,4 +1,4 @@
-class BsdGames < Formula
+class BsdGamesSimple < Formula
   desc "Classic BSD command-line games collection"
   homepage "https://www.openbsd.org/games.html"
   url "https://github.com/openbsd/src/archive/refs/heads/master.tar.gz"
