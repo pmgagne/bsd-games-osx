@@ -1,0 +1,137 @@
+# BSD Games Collection - Build Artifacts and Development Files
+# =============================================================
+
+# Compiled executables from classic BSD games
+bsd-games-classic/adventure/adventure
+bsd-games-classic/arithmetic/arithmetic
+bsd-games-classic/atc/atc
+bsd-games-classic/backgammon/backgammon/backgammon
+bsd-games-classic/backgammon/teachgammon/teachgammon
+bsd-games-classic/battlestar/battlestar
+bsd-games-classic/bcd/bcd
+bsd-games-classic/boggle/boggle/boggle
+
+# Compiled executables from OpenBSD games  
+openbsd-games/games/adventure/adventure
+openbsd-games/games/arithmetic/arithmetic
+openbsd-games/games/atc/atc
+openbsd-games/games/banner/banner
+openbsd-games/games/battlestar/battlestar
+openbsd-games/games/bcd/bcd
+openbsd-games/games/bs/bs
+openbsd-games/games/caesar/caesar
+openbsd-games/games/canfield/canfield/canfield
+openbsd-games/games/cribbage/cribbage
+openbsd-games/games/factor/factor
+openbsd-games/games/fish/fish
+openbsd-games/games/gomoku/gomoku
+openbsd-games/games/grdc/grdc
+openbsd-games/games/mille/mille
+openbsd-games/games/monop/monop
+openbsd-games/games/morse/morse
+openbsd-games/games/number/number
+openbsd-games/games/phantasia/phantasia
+openbsd-games/games/pig/pig
+openbsd-games/games/pom/pom
+openbsd-games/games/ppt/ppt
+openbsd-games/games/primes/primes
+openbsd-games/games/quiz/quiz
+openbsd-games/games/rain/rain
+openbsd-games/games/random/random
+openbsd-games/games/robots/robots
+openbsd-games/games/sail/sail
+openbsd-games/games/snake/snake
+openbsd-games/games/tetris/tetris
+openbsd-games/games/trek/trek
+openbsd-games/games/wargames/wargames
+openbsd-games/games/worm/worm
+openbsd-games/games/worms/worms
+openbsd-games/games/wump/wump
+
+# FreeBSD games (if present)
+freebsd-games/**/*
+
+# Build artifacts
+*.o
+**/*.o
+*.a
+**/*.a
+
+# Generated files
+**/data.c
+**/setup
+**/makedefs
+
+# Compressed manual pages
+*.gz
+**/*.gz
+
+# Build system files
+.depend
+**/.depend
+**/obj/
+Makefile.bsd
+config.cache
+config.status
+
+# macOS specific
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+*.dSYM/
+**/*.dSYM/
+
+# Development and editor files
+*.swp
+*.swo
+*~
+.#*
+\#*#
+*.bak
+*.backup
+*.orig
+*.tmp
+*.temp
+.vscode/
+.idea/
+.vim/
+
+# Game data and scores
+*/scores
+**/scores
+*/dictionary
+**/dictionary
+temp-dictionary
+
+# Debugging
+core
+core.*
+*.core
+
+# Archive files
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+
+# Logs
+*.log
+**/*.log
+
+# Local configuration
+Makefile.local
+config.local
+.env
+.env.local
+
+# Test output
+test-results/
+coverage/
+
+# Package managers
+node_modules/
+.npm/
