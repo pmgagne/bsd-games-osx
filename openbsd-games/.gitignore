@@ -1,0 +1,128 @@
+# OpenBSD Games Build Artifacts
+# ==============================
+
+# Compiled game executables
+adventure/adventure
+arithmetic/arithmetic
+atc/atc
+backgammon/backgammon/backgammon
+backgammon/teachgammon/teachgammon
+banner/banner
+battlestar/battlestar
+bcd/bcd
+boggle/boggle/boggle
+boggle/mkdict/mkdict
+boggle/mkindex/mkindex
+bs/bs
+caesar/caesar
+canfield/canfield/canfield
+canfield/cfscores/cfscores
+cribbage/cribbage
+factor/factor
+fish/fish
+fortune/fortune/fortune
+fortune/strfile/strfile
+fortune/unstr/unstr
+gomoku/gomoku
+grdc/grdc
+hack/hack
+hangman/hangman
+hunt/hunt/hunt
+hunt/huntd/huntd
+mille/mille
+monop/monop
+morse/morse
+number/number
+phantasia/phantasia
+pig/pig
+pom/pom
+ppt/ppt
+primes/primes
+quiz/quiz
+rain/rain
+random/random
+robots/robots
+sail/sail
+snake/snake
+tetris/tetris
+trek/trek
+wargames/wargames
+worm/worm
+worms/worms
+wump/wump
+
+# Setup and build helper executables
+adventure/setup
+hack/makedefs
+
+# Object files and build artifacts
+*.o
+**/*.o
+
+# Generated source files
+adventure/data.c
+hack/hack.onames.h
+hack/pm.h
+hack/date.h
+
+# Compressed manual pages
+*.6.gz
+*.1.gz
+*.8.gz
+**/*.6.gz
+**/*.1.gz
+**/*.8.gz
+
+# Build system files
+.depend
+**/.depend
+
+# macOS specific files
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+*.dSYM/
+**/*.dSYM/
+
+# Development files
+*.swp
+*.swo
+*~
+.#*
+\#*#
+*.bak
+*.backup
+*.orig
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+.vim/
+
+# Score and data files
+*/scores
+**/scores
+fortune/datfiles/*.dat
+
+# Debugging
+core
+core.*
+*.core
+
+# Local configuration
+Makefile.local
+config.local
+
+# Archive files
+*.tar
+*.tar.gz
+*.zip
+
+# Log files
+*.log
+**/*.log
