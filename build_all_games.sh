@@ -1,167 +1,263 @@
 #!/bin/bash
-# Comprehensive build script for BSD Games on macOS
-# This script patches and compiles OpenBSD games for macOS compatibility
 
-set -e
+# Build All OpenBSD Games for macOS
+# This script rebuilds all successfully working games using configuration-only approach
 
-GAMES_DIR="games"
-BUILD_DIR="build"
-PATCHED_DIR="patched"
+set -e  # Exit on any error
 
-# Create directories
-mkdir -p "$BUILD_DIR"
-mkdir -p "$PATCHED_DIR"
+echo "🎮 Building All OpenBSD Games for macOS"
+echo "========================================"
 
-echo "Building BSD Games for macOS..."
-echo "Patching OpenBSD-specific code for macOS compatibility..."
+# Base directory
+BASE_DIR="/Users/philippe/Documents/bsd-games/openbsd-games"
+cd "$BASE_DIR"
 
-# Function to create a patched version of a source file
-patch_for_macos() {
-    local game_name=$1
-    local source_file=$2
-    
-    local original="$GAMES_DIR/$game_name/$source_file"
-    local patched="$PATCHED_DIR/${game_name}_${source_file}"
-    
-    if [ ! -f "$original" ]; then
-        echo "✗ Source file $source_file not found for $game_name"
-        return 1
-    fi
-    
-    # Copy original to patched location
-    cp "$original" "$patched"
-    
-    # Apply common macOS compatibility patches
-    
-    # Remove pledge() calls (OpenBSD security feature not available on macOS)
-    sed -i '' '/if (pledge.*== -1)/,+1d' "$patched" 2>/dev/null || true
-    sed -i '' '/pledge.*NULL/d' "$patched" 2>/dev/null || true
-    
-    # Add u_char definition if needed
-    if grep -q "u_char" "$patched" && ! grep -q "define u_char" "$patched"; then
-        sed -i '' '/^#include.*unistd\.h/a\
-#ifndef u_char\
-#define u_char unsigned char\
-#endif
-' "$patched" 2>/dev/null || true
-    fi
-    
-    # Add sys/types.h if u_char is used
-    if grep -q "u_char" "$patched" && ! grep -q "sys/types.h" "$patched"; then
-        sed -i '' '/^#include.*unistd\.h/a\
-#include <sys/types.h>
-' "$patched" 2>/dev/null || true
-    fi
-    
-    # Replace arc4random() calls with rand() for compatibility
-    sed -i '' 's/arc4random()/rand()/g' "$patched" 2>/dev/null || true
-    sed -i '' 's/arc4random_uniform(/((unsigned)rand() % /g' "$patched" 2>/dev/null || true
-    
-    # Replace __dead with __attribute__((noreturn)) or remove it
-    sed -i '' 's/__dead/__attribute__((noreturn))/g' "$patched" 2>/dev/null || true
-    
-    echo "$patched"
-}
+# Common build flags
+BASE_CFLAGS="-Os -pipe -Werror-implicit-function-declaration"
+BASE_HOSTCC="cc"
 
-# Function to build a simple single-file game
+# Success counter
+SUCCESS_COUNT=0
+TOTAL_COUNT=0
+
+# Function to build a simple game (single directory)
 build_simple_game() {
-    local game_name=$1
-    local source_file=$2
+    local game_dir="$1"
+    local game_name=$(basename "$game_dir")
     
-    echo "Building $game_name..."
+    echo "📦 Building $game_name..."
+    TOTAL_COUNT=$((TOTAL_COUNT + 1))
     
-    # Patch the source file for macOS
-    patched_source=$(patch_for_macos "$game_name" "$source_file")
+    cd "$BASE_DIR/$game_dir"
     
-    if [ -f "$patched_source" ]; then
-        # Try different compilation options
-        if cc -o "$BUILD_DIR/$game_name" "$patched_source" -lm -lcurses 2>/dev/null; then
-            echo "✓ $game_name built successfully (with curses)"
-        elif cc -o "$BUILD_DIR/$game_name" "$patched_source" -lm 2>/dev/null; then
-            echo "✓ $game_name built successfully (with math)"
-        elif cc -o "$BUILD_DIR/$game_name" "$patched_source" 2>/dev/null; then
-            echo "✓ $game_name built successfully"
-        else
-            echo "✗ Failed to build $game_name"
-            return 1
-        fi
+    if bsdmake clean > /dev/null 2>&1; then
+        echo "   ✓ Cleaned $game_name"
+    fi
+    
+    if bsdmake CFLAGS="$BASE_CFLAGS -include ../../pledge_stub.h" HOSTCC="$BASE_HOSTCC -include ../../pledge_stub.h" > /dev/null 2>&1; then
+        echo "   ✅ SUCCESS: $game_name built successfully"
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        return 0
     else
-        echo "✗ Failed to patch $game_name"
+        echo "   ❌ FAILED: $game_name build failed"
         return 1
     fi
 }
 
-# Function to build multi-file games
-build_multi_file_game() {
-    local game_name=$1
-    shift
-    local source_files=("$@")
+# Function to build complex games with dependencies
+build_complex_game() {
+    local game_dir="$1"
+    local include_paths="$2"
+    local game_name=$(basename "$game_dir")
     
-    echo "Building $game_name..."
+    echo "📦 Building $game_name (complex)..."
+    TOTAL_COUNT=$((TOTAL_COUNT + 1))
     
-    local all_sources=""
-    for file in "${source_files[@]}"; do
-        patched_source=$(patch_for_macos "$game_name" "$file")
-        if [ -f "$patched_source" ]; then
-            all_sources="$all_sources $patched_source"
-        else
-            echo "✗ Failed to patch $file for $game_name"
-            return 1
-        fi
-    done
+    cd "$BASE_DIR/$game_dir"
     
-    if [ -n "$all_sources" ]; then
-        if cc -o "$BUILD_DIR/$game_name" $all_sources -lm -lcurses 2>/dev/null; then
-            echo "✓ $game_name built successfully (with curses)"
-        elif cc -o "$BUILD_DIR/$game_name" $all_sources -lm 2>/dev/null; then
-            echo "✓ $game_name built successfully (with math)"
-        elif cc -o "$BUILD_DIR/$game_name" $all_sources 2>/dev/null; then
-            echo "✓ $game_name built successfully"
-        else
-            echo "✗ Failed to build $game_name"
-            return 1
-        fi
+    if bsdmake clean > /dev/null 2>&1; then
+        echo "   ✓ Cleaned $game_name"
+    fi
+    
+    local cflags="$BASE_CFLAGS -include ../../../pledge_stub.h"
+    if [ -n "$include_paths" ]; then
+        cflags="$cflags $include_paths"
+    fi
+    
+    if bsdmake CFLAGS="$cflags" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+        echo "   ✅ SUCCESS: $game_name built successfully"
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        return 0
+    else
+        echo "   ❌ FAILED: $game_name build failed"
+        return 1
     fi
 }
 
-echo "========================================"
+echo
+echo "🔨 Building Simple Games..."
+echo "----------------------------"
 
-# Start building games - simple single-file games first
-echo "Building simple games..."
+# Simple single-directory games
+build_simple_game "tetris"
+build_simple_game "robots"
+build_simple_game "gomoku"
+build_simple_game "snake"
+build_simple_game "worms"
+build_simple_game "arithmetic"
+build_simple_game "primes"
+build_simple_game "bcd"
+build_simple_game "ppt"
+build_simple_game "banner"
+build_simple_game "number"
+build_simple_game "random"
+build_simple_game "grdc"
 
-build_simple_game "banner" "banner.c"
-build_simple_game "bcd" "bcd.c"
-build_simple_game "caesar" "caesar.c"
-build_simple_game "factor" "factor.c"
-build_simple_game "grdc" "grdc.c"
-build_simple_game "morse" "morse.c"
-build_simple_game "number" "number.c"
-build_simple_game "pig" "pig.c"
-build_simple_game "pom" "pom.c"
-build_simple_game "ppt" "ppt.c"
-build_simple_game "primes" "primes.c"
-build_simple_game "rain" "rain.c"
-build_simple_game "random" "random.c"
-build_simple_game "worms" "worms.c"
-build_simple_game "wump" "wump.c"
+# Games with special dependencies
+echo "📦 Building factor (needs primes headers)..."
+TOTAL_COUNT=$((TOTAL_COUNT + 1))
+cd "$BASE_DIR/factor"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../pledge_stub.h -I../primes" HOSTCC="$BASE_HOSTCC -include ../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: factor built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: factor build failed"
+fi
 
-echo ""
-echo "Building games that may need curses..."
-build_simple_game "snake" "snake.c"
-build_simple_game "tetris" "tetris.c"
+echo
+echo "🔨 Building Additional Games..."
+echo "-------------------------------"
 
-echo ""
-echo "Building arithmetic game..."
-build_simple_game "arithmetic" "arithmetic.c"
+# More simple games
+build_simple_game "caesar"
+build_simple_game "fish" 
+build_simple_game "bs"
+build_simple_game "cribbage"
+build_simple_game "adventure"
+build_simple_game "battlestar"
+build_simple_game "mille"
+build_simple_game "morse"
+build_simple_game "pig"
+build_simple_game "pom"
+build_simple_game "rain"
+build_simple_game "quiz"
+build_simple_game "monop"
+build_simple_game "phantasia"
+build_simple_game "atc"
 
-echo "========================================"
-echo "Build complete!"
-echo ""
-echo "Successfully built games:"
-ls -1 "$BUILD_DIR" 2>/dev/null | while read game; do
-    echo "  $game"
-done
+# Final batch of games
+build_simple_game "wump"
+build_simple_game "worm" 
+build_simple_game "trek"
+build_simple_game "sail"
 
-echo ""
-echo "To test a game, run: ./$BUILD_DIR/[game_name]"
-echo "For example: ./$BUILD_DIR/banner 'Hello World'"
+echo
+echo "🔨 Building Complex Multi-Component Games..."
+echo "---------------------------------------------"
+
+# Boggle system (build components first, then main game)
+echo "📦 Building Boggle System..."
+TOTAL_COUNT=$((TOTAL_COUNT + 3))
+
+cd "$BASE_DIR/boggle/mkdict"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../boggle" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: mkdict built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: mkdict build failed"
+fi
+
+cd "$BASE_DIR/boggle/mkindex"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../boggle" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: mkindex built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: mkindex build failed"
+fi
+
+cd "$BASE_DIR/boggle/boggle"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: boggle built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: boggle build failed"
+fi
+
+# Canfield system
+echo "📦 Building Canfield System..."
+TOTAL_COUNT=$((TOTAL_COUNT + 2))
+
+cd "$BASE_DIR/canfield/canfield"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: canfield built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: canfield build failed"
+fi
+
+cd "$BASE_DIR/canfield/cfscores"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: cfscores built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: cfscores build failed"
+fi
+
+# Fortune system
+echo "📦 Building Fortune System..."
+TOTAL_COUNT=$((TOTAL_COUNT + 3))
+
+cd "$BASE_DIR/fortune/strfile"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: strfile built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: strfile build failed"
+fi
+
+cd "$BASE_DIR/fortune/unstr"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../strfile" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: unstr built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: unstr build failed"
+fi
+
+cd "$BASE_DIR/fortune/fortune"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../strfile" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: fortune built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: fortune build failed"
+fi
+
+# Backgammon system
+echo "📦 Building Backgammon System..."
+TOTAL_COUNT=$((TOTAL_COUNT + 2))
+
+cd "$BASE_DIR/backgammon/backgammon"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../common_source" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: backgammon built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: backgammon build failed"
+fi
+
+cd "$BASE_DIR/backgammon/teachgammon"
+if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../common_source" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
+    echo "   ✅ SUCCESS: teachgammon built successfully"
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+else
+    echo "   ❌ FAILED: teachgammon build failed"
+fi
+
+echo
+echo "🎯 Build Summary"
+echo "==============="
+echo "✅ Successful builds: $SUCCESS_COUNT"
+echo "📊 Total attempted: $TOTAL_COUNT"
+echo "📈 Success rate: $(( SUCCESS_COUNT * 100 / TOTAL_COUNT ))%"
+
+if [ $SUCCESS_COUNT -eq $TOTAL_COUNT ]; then
+    echo "🎉 ALL GAMES BUILT SUCCESSFULLY!"
+else
+    echo "⚠️  Some games failed to build. Check individual error messages above."
+fi
+
+echo
+echo "🎮 Built Games Location:"
+echo "======================="
+echo "Games are available in their respective directories under:"
+echo "$BASE_DIR"
+echo
+echo "Examples:"
+echo "  ./tetris/tetris"
+echo "  ./robots/robots"
+echo "  ./backgammon/backgammon/backgammon"
+echo "  ./fortune/fortune/fortune"
+
+cd "$BASE_DIR"
+echo
+echo "📋 Current Built Executables:"
+echo "============================"
+find . -type f -perm +111 ! -name "*.6*" ! -name "*.sh" ! -name "Makefile*" ! -name "*.gz" | grep -v "\.o$" | grep -v "/makedefs$" | sort

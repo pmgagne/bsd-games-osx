@@ -5,9 +5,14 @@
 #include <errno.h>
 #include <stdint.h>
 #include <poll.h>
-#include <time.h>
 #include <signal.h>
 #include <sys/time.h>
+
+/* Include time.h but undefine getdate to avoid conflicts with hack's getdate */
+#include <time.h>
+#ifdef getdate
+#undef getdate
+#endif
 
 /* BSD type definitions not available on macOS */
 typedef unsigned short u_short;
