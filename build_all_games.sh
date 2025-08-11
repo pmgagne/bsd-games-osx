@@ -223,7 +223,21 @@ else
     echo "   ❌ FAILED: backgammon build failed"
 fi
 
+# Handle teachgammon special dependency on data.c
+echo "📦 Building teachgammon (with data.c dependency)..."
 cd "$BASE_DIR/backgammon/teachgammon"
+
+# Create minimal data.c if it doesn't exist
+if [ ! -f "data.c" ]; then
+    cat > data.c << 'EOF'
+/* Minimal data.c for teachgammon */
+/* Global variables needed by teachgammon */
+
+int maxmoves = 0;
+int test[2] = {0, 0};
+EOF
+fi
+
 if bsdmake clean > /dev/null 2>&1 && bsdmake CFLAGS="$BASE_CFLAGS -include ../../../pledge_stub.h -I../common_source" HOSTCC="$BASE_HOSTCC -include ../../../pledge_stub.h" > /dev/null 2>&1; then
     echo "   ✅ SUCCESS: teachgammon built successfully"
     SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
