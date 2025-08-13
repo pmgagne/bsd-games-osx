@@ -19,6 +19,7 @@
 #   make info-broken    # Details about 3 non-working games
 
 # Configuration
+VERSION = 0.1.0
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man
@@ -69,7 +70,6 @@ ALL_GAMES = $(SIMPLE_GAMES) $(COMPLEX_GAMES)
 check-deps:
 	@echo "🔍 Checking dependencies..."
 	@which bsdmake >/dev/null 2>&1 || (echo "❌ bsdmake not found. Run 'make deps' to install dependencies." && exit 1)
-	@brew list ncurses >/dev/null 2>&1 || (echo "❌ ncurses not found. Run 'make deps' to install dependencies." && exit 1)
 	@echo "✅ All dependencies found"
 
 # Install Homebrew dependencies
@@ -77,10 +77,9 @@ deps:
 	@echo "📦 Installing BSD Games dependencies via Homebrew..."
 	@echo "Installing bsdmake (BSD make implementation)..."
 	@brew install bsdmake || (echo "❌ Failed to install bsdmake" && exit 1)
-	@echo "Installing ncurses (terminal interface library)..."
-	@brew install ncurses || (echo "❌ Failed to install ncurses" && exit 1)
 	@echo "✅ All dependencies installed successfully!"
 	@echo ""
+	@echo "Note: ncurses is provided by macOS system libraries"
 	@echo "You can now run 'make all' to build all games."
 
 # Default target
@@ -101,7 +100,7 @@ help:
 	@echo "========================"
 	@echo ""
 	@echo "Targets:"
-	@echo "  deps     - Install Homebrew dependencies (bsdmake, ncurses)"
+	@echo "  deps     - Install Homebrew dependencies (bsdmake only)"
 	@echo "  check-deps - Check if required dependencies are installed"
 	@echo "  all      - Build all games (default)"
 	@echo "  simple   - Build simple single-directory games"
@@ -325,8 +324,53 @@ uninstall:
 	@echo "=========================="
 	@echo "All BSD games and documentation removed from $(PREFIX)"
 
+# Build games with bundle-specific resource paths
+bundle-games: 
+	@echo "🔧 Building games for bundle (with corrected resource paths)..."
+	@echo "=============================================================="
+	
+	# First build all games normally
+	$(MAKE) all
+	
+	# Then rebuild specific games with bundle resource paths
+	@echo "📦 Rebuilding games with bundle resource paths..."
+	
+	# Fish - needs bundle path for fish.instr
+	@cd $(SRCDIR)/fish && \
+		$(BSDMAKE) clean && \
+		sed 's|#include "pathnames.h"|#include "pathnames.h"\n#include "$(CURDIR)/bundle_pathnames.h"|' fish.c > fish_bundle.c && \
+		$(BSDMAKE) HOSTCC="$(HOSTCC)" CC="$(HOSTCC)" \
+		CFLAGS="$(GAME_CFLAGS)" \
+		SRCS="fish_bundle.c" fish && \
+		rm -f fish_bundle.c
+	@echo "   ✅ fish rebuilt for bundle"
+	
+	# Monop - needs bundle path for cards.pck  
+	@cd $(SRCDIR)/monop && \
+		$(BSDMAKE) clean && \
+		cp pathnames.h pathnames.h.orig && \
+		sed 's|"/usr/share/games/cards.pck"|"../Resources/games/cards.pck"|' pathnames.h.orig > pathnames.h && \
+		$(BSDMAKE) HOSTCC="$(HOSTCC)" CC="$(HOSTCC)" \
+		CFLAGS="$(GAME_CFLAGS)" \
+		monop && \
+		cp pathnames.h.orig pathnames.h
+	@echo "   ✅ monop rebuilt for bundle"
+	
+	# Fortune - needs bundle path for fortune directory
+	@cd $(SRCDIR)/fortune/fortune && \
+		$(BSDMAKE) clean && \
+		cp pathnames.h pathnames.h.orig && \
+		sed 's|"/usr/share/games/fortune"|"../Resources/games/fortune"|' pathnames.h.orig > pathnames.h && \
+		$(BSDMAKE) HOSTCC="$(HOSTCC)" CC="$(HOSTCC)" \
+		CFLAGS="$(GAME_CFLAGS) -I../strfile" \
+		fortune && \
+		cp pathnames.h.orig pathnames.h
+	@echo "   ✅ fortune rebuilt for bundle"
+	
+	@echo "✅ Bundle-specific games built successfully"
+
 # Create macOS Application Bundle
-bundle: all
+bundle: bundle-games
 	@echo "📦 Creating macOS Application Bundle..."
 	@echo "======================================"
 	
@@ -349,9 +393,9 @@ bundle: all
 	@echo '	<key>CFBundleDisplayName</key>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<string>BSD Games Collection</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<key>CFBundleVersion</key>' >> BSDGames.app/Contents/Info.plist
-	@echo '	<string>1.0</string>' >> BSDGames.app/Contents/Info.plist
+	@echo '	<string>$(VERSION)</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<key>CFBundleShortVersionString</key>' >> BSDGames.app/Contents/Info.plist
-	@echo '	<string>1.0</string>' >> BSDGames.app/Contents/Info.plist
+	@echo '	<string>$(VERSION)</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<key>CFBundlePackageType</key>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<string>APPL</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<key>CFBundleSignature</key>' >> BSDGames.app/Contents/Info.plist
@@ -389,6 +433,33 @@ bundle: all
 	@cp $(SRCDIR)/backgammon/teachgammon/teachgammon BSDGames.app/Contents/MacOS/
 	@echo "   ✅ Copied all complex games"
 	
+	# Copy game data files to Resources
+	@echo "Copying game data files..."
+	@mkdir -p BSDGames.app/Contents/Resources/games
+	@if [ -f $(SRCDIR)/fish/fish.instr ]; then \
+		cp $(SRCDIR)/fish/fish.instr BSDGames.app/Contents/Resources/games/; \
+		echo "   ✅ Copied fish.instr"; \
+	fi
+	@if [ -f $(SRCDIR)/monop/cards.pck ]; then \
+		cp $(SRCDIR)/monop/cards.pck BSDGames.app/Contents/Resources/games/; \
+		echo "   ✅ Copied cards.pck"; \
+	fi
+	@mkdir -p BSDGames.app/Contents/Resources/games/fortune
+	@if [ -d $(SRCDIR)/fortune/datfiles ]; then \
+		cp $(SRCDIR)/fortune/datfiles/* BSDGames.app/Contents/Resources/games/fortune/ 2>/dev/null || true; \
+		echo "   ✅ Copied fortune data files"; \
+	fi
+	# Create .dat index files for fortune
+	@if [ -f $(SRCDIR)/fortune/strfile/strfile ]; then \
+		cd BSDGames.app/Contents/Resources/games/fortune && \
+		for f in fortunes fortunes2 limerick startrek zippy recipes; do \
+			if [ -f "$$f" ] && [ ! -f "$$f.dat" ]; then \
+				$(CURDIR)/$(SRCDIR)/fortune/strfile/strfile "$$f" && \
+				echo "   ✅ Created $$f.dat"; \
+			fi; \
+		done; \
+	fi
+	
 	# Copy man pages
 	@echo "Copying man pages..."
 	@for game in $(SIMPLE_GAMES); do \
@@ -400,6 +471,12 @@ bundle: all
 		find $(SRCDIR)/$$game -name "*.6" -exec cp {} BSDGames.app/Contents/Man/man6/ \; 2>/dev/null || true; \
 	done
 	
+
+	# Copy CLI integration scripts to bundle Resources
+	@echo "Copying CLI integration scripts to bundle..."
+	@cp install-cli-links.sh BSDGames.app/Contents/Resources/install-cli-links.sh
+	@cp uninstall-cli-links.sh BSDGames.app/Contents/Resources/uninstall-cli-links.sh
+
 	# Copy application icon
 	@echo "Copying application icon..."
 	@mkdir -p BSDGames.app/Contents/Resources
@@ -410,6 +487,15 @@ bundle: all
 		echo "   ⚠️  icon.png not found"; \
 	fi
 	
+	# Copy bundle-specific games to override the normal versions
+	@echo "📦 Overwriting with bundle-specific games..."
+	@cp $(SRCDIR)/fish/fish BSDGames.app/Contents/MacOS/fish
+	@echo "   ✅ Copied bundle-specific fish"
+	@cp $(SRCDIR)/monop/monop BSDGames.app/Contents/MacOS/monop
+	@echo "   ✅ Copied bundle-specific monop"
+	@cp $(SRCDIR)/fortune/fortune/fortune BSDGames.app/Contents/MacOS/fortune
+	@echo "   ✅ Copied bundle-specific fortune"
+	
 	# Create launcher script
 	@echo "Creating launcher script..."
 	@echo '#!/bin/bash' > BSDGames.app/Contents/MacOS/bsd-games-launcher
@@ -419,45 +505,13 @@ bundle: all
 	@echo '' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '# Detect if launched from GUI (Finder) vs command line' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo 'if [ -z "$$TERM" ] || [ "$$TERM" = "dumb" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '    # Launched from GUI (Finder) - show game browser with integrated actions' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '    while true; do' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        # Show game selection with immediate action buttons' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        RESULT=$$(osascript -e "set gamesList to {\"tetris - Block puzzle game\", \"adventure - Text adventure in Colossal Cave\", \"fortune - Random quotes and sayings\", \"backgammon - Classic board game\", \"robots - Avoid the robots\", \"snake - Snake game\", \"gomoku - Five in a row\", \"arithmetic - Math drill game\", \"caesar - Caesar cipher encoder/decoder\", \"number - Convert numbers to English\", \"random - Generate random numbers\", \"wump - Hunt the Wumpus\", \"quiz - Quiz game\", \"cribbage - Card game\", \"battlestar - Text adventure game\", \"factor - Prime factorization\", \"primes - Generate prime numbers\", \"morse - Morse code translator\", \"pig - Pig Latin translator\", \"rain - Rain animation\", \"monop - Monopoly game\", \"phantasia - Fantasy role-playing game\", \"atc - Air traffic controller\", \"trek - Star Trek game\", \"sail - Naval battle simulation\", \"grdc - Digital clock display\", \"banner - Large text display\", \"bcd - Punch card format display\", \"ppt - Paper tape format display\", \"bs - Battleship game\", \"fish - Fish card game\", \"mille - Mille Bornes card game\", \"pom - Phase of moon\", \"worm - Worm game\", \"worms - Worms animation\", \"boggle - Word finding game\", \"canfield - Solitaire card game\"}" -e "if length of gamesList > 0 then" -e "    set selectedGame to choose from list gamesList with prompt \"BSD Games Collection - Select a game then choose an action:\" with empty selection allowed" -e "    if selectedGame is false or selectedGame is {} then" -e "        return \"QUIT\"" -e "    else" -e "        set gameChoice to item 1 of selectedGame" -e "        set buttonReturned to button returned of (display dialog \"Selected: \" & gameChoice & \"\\n\\nChoose your action:\" buttons {\"Help\", \"Quit\", \"Play\"} default button \"Play\" with icon note)" -e "        return gameChoice & \"|\" & buttonReturned" -e "    end if" -e "else" -e "    return \"QUIT\"" -e "end if")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        # Check if user wants to quit' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        if [ "$$RESULT" = "QUIT" ] || [ -z "$$RESULT" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '            break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        # Parse the result (game|action)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        GAME_SELECTION=$$(echo "$$RESULT" | cut -d"|" -f1)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        ACTION=$$(echo "$$RESULT" | cut -d"|" -f2)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        GAME_NAME=$$(echo "$$GAME_SELECTION" | cut -d" " -f1)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        # Execute the chosen action' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        case "$$ACTION" in' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '            "Play")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                # Open Terminal and run the selected game' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd && echo '\''Starting $$GAME_NAME from BSD Games Collection...'\'' && '\''$$BUNDLE_PATH/$$GAME_NAME'\''\"" -e "end tell"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '            "Help")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                # Check if man page exists in bundle' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                MAN_PATH="$$BUNDLE_DIR/../Man/man6/$$GAME_NAME.6"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                if [ -f "$$MAN_PATH" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                    # Open Terminal and display man page' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                    osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd && echo '\''Displaying help for $$GAME_NAME...'\'' && MANPATH='\''$$BUNDLE_DIR/../Man'\'' man $$GAME_NAME\"" -e "end tell"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                    break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                else' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                    # Show error dialog and continue loop' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                    osascript -e "display dialog \"Help documentation for $$GAME_NAME not found in bundle.\" buttons {\"OK\"} default button \"OK\" with icon caution"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '            "Quit")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '        esac' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '    done' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    # GUI mode - show AppleScript dialog' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    GAME=$$(osascript -e "set gamesList to {\"tetris\", \"adventure\", \"fortune\", \"backgammon\", \"robots\", \"snake\", \"gomoku\", \"arithmetic\", \"caesar\", \"number\", \"random\", \"wump\", \"quiz\", \"cribbage\", \"battlestar\", \"factor\", \"primes\", \"morse\", \"pig\", \"rain\", \"monop\", \"phantasia\", \"atc\", \"trek\", \"sail\", \"grdc\", \"banner\", \"bcd\", \"ppt\", \"bs\", \"fish\", \"mille\", \"pom\", \"worm\", \"worms\", \"boggle\", \"canfield\"}" -e "try" -e "set selectedGame to choose from list gamesList with title \"BSD Games Collection\" with prompt \"Select a game to play:\" OK button name \"Play\" cancel button name \"Quit\" without multiple selections allowed" -e "if selectedGame is false then" -e "return \"\"" -e "else" -e "return item 1 of selectedGame" -e "end if" -e "on error" -e "return \"\"" -e "end try")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    if [ -z "$$GAME" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        exit 0' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    # Launch the selected game in Terminal' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd && \\\"$$BUNDLE_PATH/$$GAME\\\"\"" -e "end tell"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    exit 0' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo 'fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
