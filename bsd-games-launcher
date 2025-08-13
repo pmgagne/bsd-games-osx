@@ -1,0 +1,66 @@
+#!/bin/bash
+# BSD Games Bundle Launcher
+BUNDLE_DIR="$(dirname "$0")"
+BUNDLE_PATH="$(cd "$BUNDLE_DIR" && pwd)"
+
+# Detect if launched from GUI (Finder) vs command line
+if [ -z "$TERM" ] || [ "$TERM" = "dumb" ]; then
+    # GUI mode - show AppleScript dialog and detect Option key
+    GAME_AND_OPTION=$(osascript <<EOT
+set gamesList to {"tetris", "adventure", "fortune", "backgammon", "robots", "snake", "gomoku", "arithmetic", "caesar", "number", "random", "wump", "quiz", "cribbage", "battlestar", "factor", "primes", "morse", "pig", "rain", "monop", "phantasia", "atc", "trek", "sail", "grdc", "banner", "bcd", "ppt", "bs", "fish", "mille", "pom", "worm", "worms", "boggle", "canfield"}
+try
+    set selectedGame to choose from list gamesList with title "BSD Games Collection" with prompt "Select a game to play:" OK button name "Play" cancel button name "Quit" without multiple selections allowed
+    if selectedGame is false then
+        return "|0"
+    else
+        return (item 1 of selectedGame) & "|0"
+    end if
+on error
+    return "|0"
+end try
+EOT
+    )
+    GAME="${GAME_AND_OPTION%%|*}"
+    OPTION_DOWN="${GAME_AND_OPTION##*|}"
+    if [ -z "$GAME" ]; then
+        exit 0
+    fi
+    if [ "$OPTION_DOWN" = "1" ]; then
+        # Show man page in Terminal
+        if [ -f "$BUNDLE_PATH/../Man/man6/$GAME.6" ]; then
+            osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"man -l '$BUNDLE_PATH/../Man/man6/$GAME.6'\"" -e "end tell"
+        else
+            osascript -e "display dialog \"No man page found for $GAME.\" buttons {\"OK\"} default button 1 with title \"BSD Games\""
+        fi
+    else
+        # Launch the selected game in Terminal
+        osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd '$BUNDLE_PATH' && ./$GAME\"" -e "end tell"
+    fi
+    exit 0
+fi
+
+# Command line mode - if called with no arguments, show available games
+if [ $# -eq 0 ]; then
+    echo "BSD Games Collection - Available games:"
+    echo "======================================="
+    ls -1 "$BUNDLE_PATH" | grep -v bsd-games-launcher | sort
+    echo ""
+    echo "Usage: $0 <game-name> [args...]"
+    echo "   or: /Applications/BSDGames.app/Contents/MacOS/<game-name> [args...]"
+    echo ""
+    echo "Popular games to try: tetris, adventure, fortune, backgammon"
+    exit 0
+fi
+
+# Run the requested game
+GAME="$1"
+shift
+if [ -f "$BUNDLE_PATH/$GAME" ]; then
+    cd "$BUNDLE_PATH"
+    exec "./$GAME" "$@"
+else
+    echo "Game '$GAME' not found in bundle"
+    echo "Available games:"
+    ls -1 "$BUNDLE_PATH" | grep -v bsd-games-launcher | sort
+    exit 1
+fi
