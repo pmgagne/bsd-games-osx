@@ -48,9 +48,6 @@ openbsd-games/games/worm/worm
 openbsd-games/games/worms/worms
 openbsd-games/games/wump/wump
 
-# FreeBSD games (if present)
-freebsd-games/**/*
-
 # Build artifacts
 *.o
 **/*.o
@@ -135,3 +132,12 @@ coverage/
 # Package managers
 node_modules/
 .npm/
+
+# Makefile build system
+*.o
+*.a
+.make.state
+.depend
+openbsd-games/atc/lex.c
+openbsd-games/monop/initdeck
+bsd-games-classic/boggle/boggle/bog.c
