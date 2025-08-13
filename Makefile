@@ -360,6 +360,8 @@ bundle: all
 	@echo '	<string>10.15</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<key>NSHighResolutionCapable</key>' >> BSDGames.app/Contents/Info.plist
 	@echo '	<true/>' >> BSDGames.app/Contents/Info.plist
+	@echo '	<key>CFBundleIconFile</key>' >> BSDGames.app/Contents/Info.plist
+	@echo '	<string>icon</string>' >> BSDGames.app/Contents/Info.plist
 	@echo '</dict>' >> BSDGames.app/Contents/Info.plist
 	@echo '</plist>' >> BSDGames.app/Contents/Info.plist
 	
@@ -398,6 +400,16 @@ bundle: all
 		find $(SRCDIR)/$$game -name "*.6" -exec cp {} BSDGames.app/Contents/Man/man6/ \; 2>/dev/null || true; \
 	done
 	
+	# Copy application icon
+	@echo "Copying application icon..."
+	@mkdir -p BSDGames.app/Contents/Resources
+	@if [ -f icon.png ]; then \
+		cp icon.png BSDGames.app/Contents/Resources/icon.png; \
+		echo "   ✅ Copied icon.png"; \
+	else \
+		echo "   ⚠️  icon.png not found"; \
+	fi
+	
 	# Create launcher script
 	@echo "Creating launcher script..."
 	@echo '#!/bin/bash' > BSDGames.app/Contents/MacOS/bsd-games-launcher
@@ -405,7 +417,51 @@ bundle: all
 	@echo 'BUNDLE_DIR="$$(dirname "$$0")"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo 'BUNDLE_PATH="$$(cd "$$BUNDLE_DIR" && pwd)"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
-	@echo '# If called with no arguments, show available games' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '# Detect if launched from GUI (Finder) vs command line' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo 'if [ -z "$$TERM" ] || [ "$$TERM" = "dumb" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    # Launched from GUI (Finder) - show game browser with integrated actions' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    while true; do' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        # Show game selection with immediate action buttons' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        RESULT=$$(osascript -e "set gamesList to {\"tetris - Block puzzle game\", \"adventure - Text adventure in Colossal Cave\", \"fortune - Random quotes and sayings\", \"backgammon - Classic board game\", \"robots - Avoid the robots\", \"snake - Snake game\", \"gomoku - Five in a row\", \"arithmetic - Math drill game\", \"caesar - Caesar cipher encoder/decoder\", \"number - Convert numbers to English\", \"random - Generate random numbers\", \"wump - Hunt the Wumpus\", \"quiz - Quiz game\", \"cribbage - Card game\", \"battlestar - Text adventure game\", \"factor - Prime factorization\", \"primes - Generate prime numbers\", \"morse - Morse code translator\", \"pig - Pig Latin translator\", \"rain - Rain animation\", \"monop - Monopoly game\", \"phantasia - Fantasy role-playing game\", \"atc - Air traffic controller\", \"trek - Star Trek game\", \"sail - Naval battle simulation\", \"grdc - Digital clock display\", \"banner - Large text display\", \"bcd - Punch card format display\", \"ppt - Paper tape format display\", \"bs - Battleship game\", \"fish - Fish card game\", \"mille - Mille Bornes card game\", \"pom - Phase of moon\", \"worm - Worm game\", \"worms - Worms animation\", \"boggle - Word finding game\", \"canfield - Solitaire card game\"}" -e "if length of gamesList > 0 then" -e "    set selectedGame to choose from list gamesList with prompt \"BSD Games Collection - Select a game then choose an action:\" with empty selection allowed" -e "    if selectedGame is false or selectedGame is {} then" -e "        return \"QUIT\"" -e "    else" -e "        set gameChoice to item 1 of selectedGame" -e "        set buttonReturned to button returned of (display dialog \"Selected: \" & gameChoice & \"\\n\\nChoose your action:\" buttons {\"Help\", \"Quit\", \"Play\"} default button \"Play\" with icon note)" -e "        return gameChoice & \"|\" & buttonReturned" -e "    end if" -e "else" -e "    return \"QUIT\"" -e "end if")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        # Check if user wants to quit' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        if [ "$$RESULT" = "QUIT" ] || [ -z "$$RESULT" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '            break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        # Parse the result (game|action)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        GAME_SELECTION=$$(echo "$$RESULT" | cut -d"|" -f1)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        ACTION=$$(echo "$$RESULT" | cut -d"|" -f2)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        GAME_NAME=$$(echo "$$GAME_SELECTION" | cut -d" " -f1)' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        ' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        # Execute the chosen action' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        case "$$ACTION" in' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '            "Play")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                # Open Terminal and run the selected game' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd && echo '\''Starting $$GAME_NAME from BSD Games Collection...'\'' && '\''$$BUNDLE_PATH/$$GAME_NAME'\''\"" -e "end tell"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '            "Help")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                # Check if man page exists in bundle' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                MAN_PATH="$$BUNDLE_DIR/../Man/man6/$$GAME_NAME.6"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                if [ -f "$$MAN_PATH" ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                    # Open Terminal and display man page' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                    osascript -e "tell application \"Terminal\"" -e "activate" -e "do script \"cd && echo '\''Displaying help for $$GAME_NAME...'\'' && MANPATH='\''$$BUNDLE_DIR/../Man'\'' man $$GAME_NAME\"" -e "end tell"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                    break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                else' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                    # Show error dialog and continue loop' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                    osascript -e "display dialog \"Help documentation for $$GAME_NAME not found in bundle.\" buttons {\"OK\"} default button \"OK\" with icon caution"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '            "Quit")' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                break' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '                ;;' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '        esac' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    done' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    exit 0' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo 'fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '# Command line mode - if called with no arguments, show available games' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo 'if [ $$# -eq 0 ]; then' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    echo "BSD Games Collection - Available games:"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    echo "======================================="' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
@@ -413,6 +469,8 @@ bundle: all
 	@echo '    echo ""' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    echo "Usage: $$0 <game-name> [args...]"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    echo "   or: /Applications/BSDGames.app/Contents/MacOS/<game-name> [args...]"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    echo ""' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
+	@echo '    echo "Popular games to try: tetris, adventure, fortune, backgammon"' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '    exit 0' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo 'fi' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
 	@echo '' >> BSDGames.app/Contents/MacOS/bsd-games-launcher
